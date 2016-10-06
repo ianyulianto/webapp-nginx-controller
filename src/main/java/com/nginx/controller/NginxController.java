@@ -141,7 +141,7 @@ public class NginxController {
      * Execute Command with Output String.
      *
      * @param command Command Line
-     * @return Output dari Command yang di-execute
+     * @return Output
      * @throws Exception
      */
     private Map.Entry<Boolean, String> execToString(String command) throws Exception {
