@@ -2,6 +2,7 @@ package com.nginx.controller;
 
 import org.apache.commons.exec.CommandLine;
 import org.apache.commons.exec.DefaultExecutor;
+import org.apache.commons.exec.ExecuteException;
 import org.apache.commons.exec.PumpStreamHandler;
 import org.codehaus.jettison.json.JSONArray;
 import org.codehaus.jettison.json.JSONObject;
@@ -105,8 +106,36 @@ public class NginxController {
         }
         else {
             final String line = "sudo service nginx " + option;
-            Map.Entry<Boolean, String> entry = this.execToString(line);
-            res = this.output(entry.getKey(), entry.getValue());
+
+            if ( option.equalsIgnoreCase("status") ) {
+                boolean success = false;
+                try {
+                    CommandLine cmd = CommandLine.parse(line);
+                    DefaultExecutor exec = new DefaultExecutor();
+                    final int exit = exec.execute(cmd);
+                    success = exit == 0;
+                }
+                catch (ExecuteException e) {
+                    final String msg = e.getMessage();
+                    if ( !msg.endsWith("(Exit value: 3)") ) {
+                        throw new ExecuteException(msg, e.getExitValue());
+                    }
+                    else {
+                        success = true;
+                    }
+                }
+
+                if ( !success ) {
+                    res = this.output(false, "nginx is stopped");
+                }
+                else {
+                    res = this.output(true, "nginx is running");
+                }
+            }
+            else {
+                Map.Entry<Boolean, String> entry = this.execToString(line);
+                res = this.output(entry.getKey(), entry.getValue());
+            }
         }
         return res;
     }
@@ -128,7 +157,7 @@ public class NginxController {
         final int exit = exec.execute(commandline);
 
         Map.Entry<Boolean, String> res =
-                new AbstractMap.SimpleEntry<>(exit == 0, outputStream.toString());
+                new AbstractMap.SimpleEntry<>(exit == 0, outputStream.toString().trim());
         outputStream.close();
 
         return res;
