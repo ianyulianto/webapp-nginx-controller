@@ -120,9 +120,6 @@ public class NginxController {
                     if ( !msg.endsWith("(Exit value: 3)") ) {
                         throw new ExecuteException(msg, e.getExitValue());
                     }
-                    else {
-                        success = true;
-                    }
                 }
 
                 if ( !success ) {
