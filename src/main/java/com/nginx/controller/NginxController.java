@@ -4,14 +4,15 @@ import org.apache.commons.exec.CommandLine;
 import org.apache.commons.exec.DefaultExecutor;
 import org.apache.commons.exec.PumpStreamHandler;
 import org.codehaus.jettison.json.JSONArray;
+import org.codehaus.jettison.json.JSONObject;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseBody;
 
 import java.io.ByteArrayOutputStream;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 /**
  * Nginx Web Controller
@@ -22,16 +23,54 @@ import java.util.List;
 @Controller
 @RequestMapping(
         value = "/nginx",
-        produces = MediaType.APPLICATION_JSON_VALUE
+        produces = MediaType.TEXT_PLAIN_VALUE
 )
 public class NginxController {
 
-    private static final List<String> CMDS;
-    static {
-        CMDS = new ArrayList<>();
-        CMDS.add("/version");
-        CMDS.add("/check");
-        CMDS.add("/reload");
+    private static final List<String> CMDS = new ArrayList<String>(){{
+        add("/version");
+        add("/check");
+
+        add("/service/start");
+        add("/service/stop");
+        add("/service/reload");
+        add("/service/status");
+        add("/service/force-reload");
+        add("/service/configtest");
+        add("/service/upgrade");
+        add("/service/restart");
+        add("/service/reopen_logs");
+    }};
+
+    private static final Set<String> SERVICE_OPT = new HashSet<String>(){{
+        add("start");
+        add("stop");
+        add("reload");
+        add("status");
+        add("force-reload");
+        add("configtest");
+        add("upgrade");
+        add("restart");
+        add("reopen_logs");
+    }};
+
+    private String output(boolean bool) throws Exception {
+        JSONObject res = new JSONObject();
+
+        String status = "OK!";
+        if ( !bool ) {
+            status = "Meh!";
+        }
+        res.put("status", status);
+
+        return res.toString(4);
+    }
+
+    private String output(boolean bool, String msg) throws Exception {
+        JSONObject res = new JSONObject(this.output(bool));
+        res.put("message", msg);
+
+        return res.toString(4);
     }
 
     @RequestMapping
@@ -46,44 +85,30 @@ public class NginxController {
     public String check() throws Exception {
         final String line = "rpm -qa | grep 'nginx'";
         final boolean available = this.executeCommandLine(line);
-
-        JSONArray res = new JSONArray();
-        if ( available ) {
-            res.put("OK");
-        }
-        else {
-            res.put("Meh!");
-        }
-        return res.toString(4);
+        return this.output(available);
     }
 
     @RequestMapping( "/version" )
     @ResponseBody
     public String version() throws Exception {
         final String line = "nginx -v";
-        final String output = this.execToString(line);
-
-        JSONArray res = new JSONArray();
-        if ( output != null ) {
-            res.put(output);
-        }
-        return res.toString(4);
+        Map.Entry<Boolean, String> res = this.execToString(line);
+        return this.output(res.getKey(), res.getValue());
     }
 
-    @RequestMapping( "/reload" )
+    @RequestMapping( "/service/{option}" )
     @ResponseBody
-    public String reload() throws Exception {
-        final String line = "sudo service nginx reload";
-        final boolean available = this.executeCommandLine(line);
-
-        JSONArray res = new JSONArray();
-        if ( available ) {
-            res.put("OK");
+    public String restart(@PathVariable("option") String option) throws Exception {
+        final String res;
+        if ( !SERVICE_OPT.contains(option) ) {
+            res = this.output(false, "Please refer to " + SERVICE_OPT.toString());
         }
         else {
-            res.put("Meh!");
+            final String line = "sudo service nginx " + option;
+            Map.Entry<Boolean, String> entry = this.execToString(line);
+            res = this.output(entry.getKey(), entry.getValue());
         }
-        return res.toString(4);
+        return res;
     }
 
     /**
@@ -93,14 +118,20 @@ public class NginxController {
      * @return Output dari Command yang di-execute
      * @throws Exception
      */
-    private String execToString(String command) throws Exception {
+    private Map.Entry<Boolean, String> execToString(String command) throws Exception {
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         CommandLine commandline = CommandLine.parse(command);
         DefaultExecutor exec = new DefaultExecutor();
         PumpStreamHandler streamHandler = new PumpStreamHandler(outputStream);
         exec.setStreamHandler(streamHandler);
-        exec.execute(commandline);
-        return(outputStream.toString());
+
+        final int exit = exec.execute(commandline);
+
+        Map.Entry<Boolean, String> res =
+                new AbstractMap.SimpleEntry<>(exit == 0, outputStream.toString());
+        outputStream.close();
+
+        return res;
     }
 
     /**
